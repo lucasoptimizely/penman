@@ -1,0 +1,4 @@
+set solib-search-path ./obj/local/armeabi-v7a
+directory /home/luuks/Programs/android-ndk-r8/platforms/android-14/arch-arm/usr/include /home/luuks/Programs/android-ndk-r8/sources/cxx-stl/gnu-libstdc++ /home/luuks/Programs/OpenCV4Android/OpenCV-2.4.1/share/opencv/../../include/opencv /home/luuks/Programs/OpenCV4Android/OpenCV-2.4.1/share/opencv/../../include /home/luuks/Programs/android-ndk-r8/sources/cxx-stl/gnu-libstdc++/include /home/luuks/Programs/android-ndk-r8/sources/cxx-stl/gnu-libstdc++/libs/armeabi-v7a/include jni
+file ./obj/local/armeabi-v7a/app_process
+target remote :5039

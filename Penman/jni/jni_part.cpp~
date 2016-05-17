@@ -1,0 +1,252 @@
+#include <jni.h>
+
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <math.h>
+
+#include "opencv2/core/core.hpp"
+#include "opencv2/ml/ml.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/nonfree/nonfree.hpp"
+
+#include <android/log.h> 
+
+#define LOGV(...) __android_log_print(ANDROID_LOG_VERBOSE, "libnav", __VA_ARGS__) 
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG  , "libnav", __VA_ARGS__) 
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO   , "libnav", __VA_ARGS__) 
+#define LOGW(...) __android_log_print(ANDROID_LOG_WARN   , "libnav", __VA_ARGS__) 
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR  , "libnav", __VA_ARGS__) 
+
+
+using namespace std;
+using namespace cv;
+
+extern "C" {
+
+    int getThreshold(){
+        return 50;
+        
+    }
+    CvSVM mysvm;
+    bool loaded = false;
+    
+    void loadSVM(){
+        if(!loaded){
+            mysvm.load("SVMdata.xml");    
+            loaded = true;
+        } 
+    }
+
+
+    JNIEXPORT void JNICALL Java_com_noregular_penman_FindFieldView_FindFeatures(JNIEnv* env, jobject thiz, jlong addrGray, jlong addrRgba)
+    {
+        Mat* pMatGr=(Mat*)addrGray;
+        Mat* pMatRgb=(Mat*)addrRgba;
+        vector<KeyPoint> v;
+
+        
+
+        FastFeatureDetector detector(50);
+        detector.detect(*pMatGr, v);
+        for( size_t i = 0; i < v.size(); i++ )
+            circle(*pMatRgb, Point(v[i].pt.x, v[i].pt.y), 10, Scalar(255,0,0,255));
+    }
+    
+        
+    
+/**
+ * Searches if a keypoint that is in the points vector with index "index" is in
+ * another keypoint-box.
+ */
+int inBox(int index, vector<KeyPoint> points) {
+	int result = -1;
+	bool stop = false;
+
+	vector<Rect> rectangles;
+	for (unsigned int i = 0; i < points.size(); i++) {
+		KeyPoint kp = points[i];
+		Rect rect = cvRect(kp.pt.x - ((int) kp.size / 2),
+				kp.pt.y - ((int) kp.size / 2), (int) kp.size, (int) kp.size);
+		rectangles.push_back(rect);
+	}
+
+	unsigned int newindex = index;
+
+	Rect current = rectangles[index];
+	unsigned int i = 0;
+	for (i = 0; i < rectangles.size(); i++) {
+		if (i != newindex) {
+			for (int j = 0; j < 4; j++) {
+				int x, y;
+				if (j == 0) {
+					x = current.x;
+					y = current.y;
+				} else if (j == 1) {
+					x = current.x + current.width;
+					y = current.y;
+				} else if (j == 2) {
+					x = current.x;
+					y = current.y + current.height;
+				} else {
+					x = current.x + current.width;
+					y = current.y + current.height;
+				}
+
+				if (x >= (rectangles[i].x)
+						&& x <= (rectangles[i].x + rectangles[i].width)
+						&& y >= (rectangles[i].y)
+						&& y <= (rectangles[i].y + rectangles[i].height)) {
+					result = i;
+					stop = true;
+					break;
+				}
+			}
+			if (stop) {
+				break;
+			}
+			for (int j = 0; j < 4; j++) {
+				int x, y;
+				if (j == 0) {
+					x = rectangles[i].x;
+					y = rectangles[i].y;
+				} else if (j == 1) {
+					x = rectangles[i].x + rectangles[i].width;
+					y = rectangles[i].y;
+				} else if (j == 2) {
+					x = rectangles[i].x;
+					y = rectangles[i].y + rectangles[i].height;
+				} else {
+					x = rectangles[i].x + rectangles[i].width;
+					y = rectangles[i].y + rectangles[i].height;
+				}
+
+				if (x >= (current.x) && x <= (current.x + current.width)
+						&& y >= (current.y)
+						&& y <= (current.y + current.height)) {
+					result = i;
+					//cout << "FOUND!!!!" << endl;
+					stop = true;
+					break;
+				}
+			}
+			if (stop) {
+				break;
+			}
+
+		}
+	}
+
+	return result;
+}    
+    
+    /**
+     * Draws a list of keypoints.
+     */
+    void drawPoints(Mat &image, std::vector<KeyPoint> points, Scalar color) {
+	    for (unsigned int i = 0; i < points.size(); i++) {
+		    KeyPoint kp = points[i];
+		    CvRect rect = cvRect(kp.pt.x - ((int) kp.size / 2),
+				    kp.pt.y - ((int) kp.size / 2), (int) kp.size, (int) kp.size);
+		    rectangle(image, cvPoint(rect.x, rect.y),
+				    cvPoint(rect.x + rect.width, rect.y + rect.height), color);
+	    }
+
+    }    
+    
+    /**
+     * Looks if a keypoint is in a box that is bigger. The smallest keypoint is
+     * removed from the keypoints list and added to the bad keypoints list.
+     */
+    void addToKeypoints(vector<KeyPoint> &kps, KeyPoint kp,
+		    vector<KeyPoint> &bad_kps) {
+	    kps.push_back(kp);
+	    int newitemindex = kps.size() - 1;
+	    int found = inBox(newitemindex, kps);
+
+	    if (found != -1) {
+		    KeyPoint tmp;
+		    if (kps[newitemindex].size > kps[found].size) {
+			    tmp = kps[found];
+			    kps.erase(kps.begin() + found);
+			    bad_kps.push_back(tmp);
+		    } else {
+			    tmp = kps[newitemindex];
+			    kps.erase(kps.begin() + newitemindex);
+
+			    bad_kps.push_back(tmp);
+		    }
+	    }
+
+    }    
+    
+    /**
+     * Creates the descriptors given the keypoints. This function makes SURF
+     * descriptors.
+     */
+    void createDescriptors(Mat &descriptors, vector<KeyPoint> &kps, Mat &image) {
+	    SurfDescriptorExtractor extractor;
+	    extractor.compute(image, kps, descriptors);
+    }
+    
+    
+    JNIEXPORT void JNICALL Java_com_noregular_penman_FindFieldView_findTriangles(JNIEnv* env, jobject thiz, jlong addrGray, jlong addrRgba) {
+        LOGV("TEST");
+        Mat* searchimage= (Mat*)addrGray;
+        Mat* displayimage=(Mat*)addrRgba;
+
+        Mat dest;
+    
+        // Resize so that the search area is minimized and SURF goes faster
+        Size size = Size(640,320);
+		resize(*searchimage, dest, size,0,0,0);
+
+	    if(!loaded){
+	        loadSVM();
+	    }
+	    int minHessian = 2000;
+
+
+	    SURF surfobject = SURF(minHessian, 3, 2, false, false);
+
+	    std::vector<KeyPoint> keypoints_scene, keypoints_triangles, keypoints_not,
+			    keypoints_filter_1, keypoints_filter_2, keypoints_filter_3,
+			    keypoints_filter_4, keypoints_filter;
+	    Mat mask = Mat();
+	    // Find keypoints
+
+	    surfobject.operator ()(dest, mask, keypoints_scene);
+	    
+	    for(size_t i = 0; i < keypoints_scene.size(); i++){
+	            keypoints_scene[i].pt.x = keypoints_scene[i].pt.x * 2;
+	            keypoints_scene[i].pt.y = keypoints_scene[i].pt.y * 2;
+	            keypoints_scene[i].size = keypoints_scene[i].size * 2;
+	    }
+
+	    Mat descriptors = Mat(keypoints_scene.size(), 64, CV_32FC1);
+
+	    createDescriptors(descriptors, keypoints_scene, *searchimage);
+	    
+	    drawPoints(*displayimage, keypoints_scene, Scalar(0, 0, 255));
+	    
+
+        string s = "count: " + mysvm.get_support_vector_count() + "";
+        
+        LOGV(s.c_str());
+	    
+
+	    
+
+
+
+//	    drawPoints(*displayimage, keypoints_not, Scalar(0, 0, 255));
+//	    drawPoints(*displayimage, keypoints_filter, Scalar(255, 0, 0));
+
+
+    }    
+
+}

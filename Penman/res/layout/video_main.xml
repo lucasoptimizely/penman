@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<merge android:id="@+id/VideoMainLayout"
+	android:layout_height="fill_parent" xmlns:android="http://schemas.android.com/apk/res/android"
+	android:layout_width="fill_parent" android:orientation="horizontal">
+
+
+    <LinearLayout
+        android:id="@+id/findfield"
+        android:layout_width="fill_parent" android:layout_height="fill_parent"
+        android:orientation="vertical" >
+    </LinearLayout>
+    
+
+
+    <Button
+        android:id="@+id/button1"
+        android:layout_width="400dp" 
+        android:layout_height="wrap_content" 
+        android:layout_marginBottom="20dip"
+        android:layout_gravity="center_horizontal|bottom"
+
+        android:padding="12dip"
+        android:text="Capture" 
+        android:visibility="visible" />
+
+
+
+</merge>
